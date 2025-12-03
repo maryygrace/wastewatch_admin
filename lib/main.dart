@@ -63,12 +63,11 @@ class WasteWatchAdminApp extends StatelessWidget {
           home: StreamBuilder<AuthState>(
             stream: Supabase.instance.client.auth.onAuthStateChange,
             builder: (context, snapshot) {
-              if (!snapshot.hasData) {
-                return const Scaffold(body: Center(child: CircularProgressIndicator()));
-              }
-              if (snapshot.data!.session != null) {
+              // If the snapshot has data and a session exists, the user is logged in.
+              if (snapshot.hasData && snapshot.data!.session != null) {
                 return const AdminHomePage();
               }
+              // Otherwise, show the login screen. This also handles the initial loading state.
               return const LoginScreen();
             },
           ),

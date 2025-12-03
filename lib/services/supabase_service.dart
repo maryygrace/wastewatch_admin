@@ -88,7 +88,7 @@ class SupabaseService {
           // This explicit syntax tells Supabase which foreign key column on the 'reports' table to use for the join.
           // We join 'users' twice: once for the reporter (via the 'user_id' column) and once for the assignee (via the 'assigned_to' column).
           // The alias (e.g., 'reporter:') is what the joined data will be named in the result.
-          .select('*, reporter:users!userId(full_name, email), assignee:users!collector_id(full_name, email)');
+          .select('*, reporter:users!userId(full_name, email), assignee:users!reports_collector_id_fkey(full_name, email)');
       
       if (status != null && status != 'all') {
         query = query.eq('status', status);
@@ -263,15 +263,23 @@ class SupabaseService {
   }
 
   /// Fetches dashboard summary statistics using a single RPC call.
+  /// This calls a simple and secure SQL function `get_dashboard_stats` to ensure stability.
   Future<Map<String, dynamic>> getDashboardSummaryStats() async {
     try {
-      final response = await _supabase.rpc('get_dashboard_summary_stats');
-      // The response is a JSON object (Map<String, dynamic>)
-      return response as Map<String, dynamic>;
+      // Call the simple and reliable SQL function.
+      final response = await _supabase.rpc('get_dashboard_stats');
+      
+      // RPC functions that return a single row return a List with one element.
+      // If the table is empty, the list might be empty, so we handle that case.
+      if (response is List && response.isNotEmpty) {
+        return response.first as Map<String, dynamic>;
+      }
+      // If the list is empty, it means all counts are zero.
+      return {'total_reports': 0, 'pending_reports': 0, 'resolved_reports': 0, 'in_progress_reports': 0};
     } catch (e) {
       _log.severe('Error fetching dashboard summary stats', e);
       // Return a map with zero values on error to prevent UI from breaking.
-      return {'total_reports': 0, 'pending_reports': 0, 'resolved_reports': 0};
+      return {'total_reports': 0, 'pending_reports': 0, 'resolved_reports': 0, 'in_progress_reports': 0};
     }
   }
 
@@ -297,7 +305,7 @@ class SupabaseService {
   /// This calls a PostgreSQL function `get_top_collectors` in Supabase.
   Future<List<Map<String, dynamic>>> getTopCollectors({int limit = 5}) async {
     try {
-      final response = await _supabase.rpc('get_top_collectors', params: {'limit_count': limit});
+      final response = await _supabase.rpc('get_top_collectors', params: {'p_limit': limit});
       // The response is a List<dynamic>, so we cast it.
       return (response as List).map((item) => item as Map<String, dynamic>).toList();
     } catch (e) {

@@ -172,8 +172,9 @@ class _ClusterMapScreenState extends State<ClusterMapScreen> {
     try {
       final url = Uri.parse('https://nominatim.openstreetmap.org/reverse?format=json&lat=$lat&lon=$lng');
       // Nominatim requires a User-Agent header.
-      final response = await http.get(url, headers: {'User-Agent': 'WasteWatchAdmin/1.0'});
-
+      final response = await http
+          .get(url, headers: {'User-Agent': 'WasteWatchAdmin/1.0'})
+          .timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data['display_name'] ?? 'Address not found';
@@ -294,30 +295,32 @@ class _ClusterMapScreenState extends State<ClusterMapScreen> {
     showModalBottomSheet(
       context: context,
       builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                marker.isCluster ? 'Cluster ${marker.clusterLabel} Details' : 'Outlier Details',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const Divider(height: 24),
-              _buildDetailRow(Icons.pin_drop, 'Centroid Location', '${marker.lat.toStringAsFixed(5)}, ${marker.lng.toStringAsFixed(5)}'),
-              if (marker.isCluster)
-                _buildDetailRow(Icons.location_city, 'Approximate Address', address),
-              _buildDetailRow(Icons.summarize, 'Total Reports', marker.count.toString()),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  child: const Text('Close'),
-                  onPressed: () => Navigator.of(context).pop(),
+        return SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  marker.isCluster ? 'Cluster ${marker.clusterLabel} Details' : 'Outlier Details',
+                  style: Theme.of(context).textTheme.headlineSmall,
                 ),
-              ),
-            ],
+                const Divider(height: 24),
+                _buildDetailRow(Icons.pin_drop, 'Centroid Location', '${marker.lat.toStringAsFixed(5)}, ${marker.lng.toStringAsFixed(5)}'),
+                if (marker.isCluster)
+                  _buildDetailRow(Icons.location_city, 'Approximate Address', address),
+                _buildDetailRow(Icons.summarize, 'Total Reports', marker.count.toString()),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    child: const Text('Close'),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },

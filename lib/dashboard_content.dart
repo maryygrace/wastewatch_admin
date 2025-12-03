@@ -29,13 +29,27 @@ class DashboardContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // --- HEADER ---
-          const Text(
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Dashboard Overview'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              // A simple way to trigger a refresh is to navigate to the same index.
+              // This can be enhanced with a more direct refresh mechanism if needed.
+              onNavigate(currentIndex);
+            },
+            tooltip: 'Refresh Data',
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
             'Dashboard Overview',
             style: TextStyle(
               fontSize: 28,
@@ -91,7 +105,7 @@ class DashboardContent extends StatelessWidget {
                 flex: 1,
                 child: _buildInfoCard(
                   title: 'Top Collectors',
-                  child: const Center(child: Text('List of top collectors...')),
+                  child: const _TopCollectorsList(),
                 ),
               ),
               const SizedBox(width: 24),
@@ -105,7 +119,7 @@ class DashboardContent extends StatelessWidget {
               ),
             ],
           ),
-        ],
+        ],),
       ),
     );
   }
@@ -233,6 +247,29 @@ class DashboardContent extends StatelessWidget {
   }
 }
 
+/// A utility class to provide consistent colors and icons for report statuses.
+class StatusUtils {
+  static Color getStatusColor(String status) {
+    return switch (status) {
+      'pending' => Colors.orange,
+      'in-progress' => Colors.blue,
+      'resolved' => Colors.green,
+      'rejected' => Colors.red,
+      _ => Colors.grey,
+    };
+  }
+
+  static IconData getStatusIcon(String status) {
+    return switch (status) {
+      'pending' => Icons.hourglass_top_rounded,
+      'in-progress' => Icons.construction_rounded,
+      'resolved' => Icons.check_circle_outline_rounded,
+      'rejected' => Icons.cancel_outlined,
+      _ => Icons.help_outline,
+    };
+  }
+}
+
 /// A widget to display a list of the 5 most recent reports.
 class _RecentReportsList extends StatefulWidget {
   const _RecentReportsList();
@@ -281,39 +318,78 @@ class _RecentReportsListState extends State<_RecentReportsList> {
             return ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
               leading: CircleAvatar(
-                backgroundColor: _getStatusColor(status).withAlpha(50),
-                child: Icon(_getStatusIcon(status), color: _getStatusColor(status)),
+                backgroundColor: StatusUtils.getStatusColor(status).withAlpha(50),
+                child: Icon(StatusUtils.getStatusIcon(status), color: StatusUtils.getStatusColor(status)),
               ),
               title: Text(reporterName, style: const TextStyle(fontWeight: FontWeight.w600)),
               subtitle: Text('Status: $status - $date'),
             );
           },
         );
-      },
-    );
-  }
-
-  Color _getStatusColor(String status) {
-    return switch (status) {
-      'pending' => Colors.orange,
-      'in-progress' => Colors.blue,
-      'resolved' => Colors.green,
-      'rejected' => Colors.red,
-      _ => Colors.grey,
-    };
-  }
-
-  IconData _getStatusIcon(String status) {
-    return switch (status) {
-      'pending' => Icons.hourglass_top_rounded,
-      'in-progress' => Icons.construction_rounded,
-      'resolved' => Icons.check_circle_outline_rounded,
-      'rejected' => Icons.cancel_outlined,
-      _ => Icons.help_outline,
-    };
+      },);
   }
 }
 
+/// A widget to display a list of the top-performing collectors.
+class _TopCollectorsList extends StatefulWidget {
+  const _TopCollectorsList();
+
+  @override
+  State<_TopCollectorsList> createState() => _TopCollectorsListState();
+}
+
+class _TopCollectorsListState extends State<_TopCollectorsList> {
+  final _supabaseService = SupabaseService();
+  late Future<List<Map<String, dynamic>>> _collectorsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _collectorsFuture = _supabaseService.getTopCollectors(limit: 5);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _collectorsFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return Center(child: Text('Error: ${snapshot.error}'));
+        }
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const Center(child: Text('No collector data available.'));
+        }
+
+        final collectors = snapshot.data!;
+        return ListView.separated(
+          itemCount: collectors.length,
+          separatorBuilder: (context, index) => const Divider(height: 1),
+          itemBuilder: (context, index) {
+            final collector = collectors[index];
+            final name = collector['full_name'] ?? 'Unknown Collector';
+            final resolvedCount = collector['resolved_reports_count']?.toString() ?? '0';
+
+            return ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: CircleAvatar(
+                backgroundColor: DashboardContent._primaryAccent.withAlpha(50),
+                child: Text(
+                  (index + 1).toString(),
+                  style: const TextStyle(fontWeight: FontWeight.bold, color: DashboardContent._primaryAccent),
+                ),
+              ),
+              title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
+              trailing: Text('$resolvedCount Resolved', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+            );
+          },
+        );
+      },
+    );
+  }
+}
 /// A widget to display a list of system alerts (e.g., overdue pending reports).
 class _SystemAlertsList extends StatefulWidget {
   const _SystemAlertsList();
@@ -395,11 +471,13 @@ class _SummaryCardsRow extends StatefulWidget {
 
 class _SummaryCardsRowState extends State<_SummaryCardsRow> {
   final _supabaseService = SupabaseService();
-  late Future<Map<String, dynamic>> _statsFuture;
+  // Initialize the future directly. This prevents it from being called on every rebuild.
+  Future<Map<String, dynamic>>? _statsFuture;
 
   @override
   void initState() {
     super.initState();
+    // Assign the future in initState.
     _statsFuture = _supabaseService.getDashboardSummaryStats();
   }
 
@@ -412,9 +490,10 @@ class _SummaryCardsRowState extends State<_SummaryCardsRow> {
           // Show placeholders while loading
           return _buildSummaryCards(isLoading: true);
         }
+
         if (snapshot.hasError || !snapshot.hasData) {
-          // Show zero values on error
-          return _buildSummaryCards(stats: {'total_reports': 0, 'pending_reports': 0, 'resolved_reports': 0});
+          // On error or no data, show placeholders with error indication if desired.
+          return _buildSummaryCards(isLoading: true); // Or show an error message
         }
 
         final stats = snapshot.data!;
@@ -428,6 +507,7 @@ class _SummaryCardsRowState extends State<_SummaryCardsRow> {
     final totalReports = stats?['total_reports']?.toString() ?? '...';
     final pendingReports = stats?['pending_reports']?.toString() ?? '...';
     final resolvedReports = stats?['resolved_reports']?.toString() ?? '...';
+    final inProgressReports = stats?['in_progress_reports']?.toString() ?? '...';
 
     return Row(
       children: [
@@ -440,11 +520,11 @@ class _SummaryCardsRowState extends State<_SummaryCardsRow> {
           ),
         ),
         const SizedBox(width: 24),
-        const Expanded(
+        Expanded(
           child: _SummaryCard(
-            title: 'Waste Collected (kg)',
-            value: '8,530', // This remains a placeholder for now
-            icon: Icons.recycling,
+            title: 'In-Progress Reports',
+            value: isLoading ? '...' : inProgressReports,
+            icon: Icons.construction,
             color: DashboardContent._cardColor2,
           ),
         ),
@@ -452,7 +532,7 @@ class _SummaryCardsRowState extends State<_SummaryCardsRow> {
         Expanded(
           child: _SummaryCard(
             title: 'Pending Reports',
-            value: isLoading ? '...' : pendingReports,
+            value: isLoading ? '...' : pendingReports, // This will show '...' if stats is null
             icon: Icons.warning,
             color: DashboardContent._cardColor3,
           ),
@@ -461,7 +541,7 @@ class _SummaryCardsRowState extends State<_SummaryCardsRow> {
         Expanded(
           child: _SummaryCard(
             title: 'Resolved Reports',
-            value: isLoading ? '...' : resolvedReports,
+            value: isLoading ? '...' : resolvedReports, // This will show '...' if stats is null
             icon: Icons.check_circle_outline,
             color: DashboardContent._cardColor4,
           ),
@@ -471,7 +551,7 @@ class _SummaryCardsRowState extends State<_SummaryCardsRow> {
   }
 }
 
-/// A widget that builds the "Reports by Location" pie chart with legends.
+/// A widget that builds the "Reports by Location" bar chart.
 class _ReportsByLocationChart extends StatefulWidget {
   @override
   State<StatefulWidget> createState() => _ReportsByLocationChartState();
@@ -482,7 +562,6 @@ class _ReportsByLocationChartState extends State<_ReportsByLocationChart> {
   final _supabaseService = SupabaseService();
   late Future<List<Map<String, dynamic>>> _chartDataFuture;
 
-  // Colors for each section of the pie chart.
   final List<Color> colorList = [
     const Color(0xFF2ECC71),
     const Color(0xFF3498DB),
@@ -515,13 +594,14 @@ class _ReportsByLocationChartState extends State<_ReportsByLocationChart> {
         }
 
         final data = snapshot.data!;
+        // Sort data from highest to lowest report count
+        data.sort((a, b) => (b['report_count'] as num).compareTo(a['report_count'] as num));
         return _buildChart(data);
       },
     );
   }
 
   Widget _buildChart(List<Map<String, dynamic>> data) {
-    // Find the maximum value to set the chart's horizontal axis limit.
     final maxValue = data.fold<double>(0, (max, item) {
       final value = (item['report_count'] as num).toDouble();
       return value > max ? value : max;
@@ -534,54 +614,26 @@ class _ReportsByLocationChartState extends State<_ReportsByLocationChart> {
         barTouchData: BarTouchData(
           touchTooltipData: BarTouchTooltipData(
             getTooltipItem: (group, groupIndex, rod, rodIndex) {
-              final location = data[groupIndex]['location'] as String;
+              final location = data[groupIndex]['location'] as String? ?? 'Unknown';
               return BarTooltipItem(
                 '$location\n',
                 const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                 children: <TextSpan>[
                   TextSpan(
                     text: rod.toY.round().toString(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
                   ),
                 ],
               );
             },
           ),
         ),
-        titlesData: FlTitlesData(
+        titlesData: const FlTitlesData(
           show: true,
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              getTitlesWidget: (double value, TitleMeta meta) {
-                final index = value.toInt();
-                if (index >= 0 && index < data.length) {
-                  final location = data[index]['location'] as String;
-                  // Truncate long labels for the axis
-                  final shortLabel = location.length > 10 ? '${location.substring(0, 8)}...' : location;
-                  return SideTitleWidget(meta: meta, space: 4, child: Text(shortLabel, style: const TextStyle(fontSize: 10)));
-                }
-                return const Text('');
-              },
-              reservedSize: 38,
-            ),
-          ),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              getTitlesWidget: (double value, TitleMeta meta) {
-                // Use SideTitleWidget for consistency and proper spacing.
-                final text = Text(value.toInt().toString(), style: const TextStyle(fontSize: 10));
-                return SideTitleWidget(meta: meta, child: text);
-              },
-              reservedSize: 40,
-            ),
-          ),
+          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)), // Hide labels to keep it clean
+          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 40)),
         ),
         borderData: FlBorderData(show: false),
         barGroups: List.generate(data.length, (i) {
@@ -602,8 +654,39 @@ class _ReportsByLocationChartState extends State<_ReportsByLocationChart> {
         gridData: FlGridData(
           show: true,
           drawVerticalLine: false,
-          horizontalInterval: maxValue > 0 ? maxValue / 5 : 1, // Avoid division by zero
+          horizontalInterval: maxValue > 0 ? (maxValue / 4).ceilToDouble() : 1,
         ),
+      ),
+    );
+  }
+}
+
+/// A small widget to act as a legend item for charts.
+class _Indicator extends StatelessWidget {
+  final Color color;
+  final String text;
+  final bool isSquare;
+
+  const _Indicator({required this.color, required this.text, this.isSquare = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        children: <Widget>[
+          Container(
+            width: 16,
+            height: 16,
+            decoration: BoxDecoration(
+              shape: isSquare ? BoxShape.rectangle : BoxShape.circle,
+              color: color,
+              borderRadius: isSquare ? BorderRadius.circular(4) : null,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(text)
+        ],
       ),
     );
   }
@@ -621,15 +704,14 @@ class _WasteStatisticsChartState extends State<_WasteStatisticsChart> {
   final _supabaseService = SupabaseService();
   late Future<List<Map<String, dynamic>>> _chartDataFuture;
 
-  // A vibrant color palette for the chart bars.
-  final List<Color> colorList = [
-    const Color(0xFFE67E22),
-    const Color(0xFF2980B9),
-    const Color(0xFF27AE60),
-    const Color(0xFF8E44AD),
-    const Color(0xFFC0392B),
-    const Color(0xFF16A085),
-  ];
+  // A specific color palette for the 5 waste categories for consistency.
+  final Map<String, Color> _categoryColors = {
+    'plastic': const Color(0xFF3498DB), // Blue
+    'glass': const Color(0xFF1ABC9C),   // Turquoise
+    'metal': const Color(0xFF95A5A6),   // Grey
+    'paper': const Color(0xFFF1C40F),   // Yellow
+    'residual': const Color(0xFFE74C3C),  // Red
+  };
 
   @override
   void initState() {
@@ -652,64 +734,63 @@ class _WasteStatisticsChartState extends State<_WasteStatisticsChart> {
           return const Center(child: Text('No category data available.'));
         }
 
-        final data = snapshot.data!;
-        return _buildChart(data);
+        // Filter the data to only include the 5 specified waste categories.
+        final allowedCategories = _categoryColors.keys.toList();
+        final filteredData = snapshot.data!
+            .where((item) => allowedCategories.contains(item['category']))
+            .toList();
+
+        return _buildChart(filteredData);
       },
     );
   }
 
   Widget _buildChart(List<Map<String, dynamic>> data) {
-    final maxValue = data.fold<double>(0, (max, item) {
-      final value = (item['report_count'] as num).toDouble();
-      return value > max ? value : max;
-    });
+    // Sort data to match the order of colors for consistency
+    data.sort((a, b) => (_categoryColors.keys.toList().indexOf(a['category']))
+        .compareTo(_categoryColors.keys.toList().indexOf(b['category'])));
 
-    return BarChart(
-      BarChartData(
-        alignment: BarChartAlignment.spaceAround,
-        maxY: maxValue * 1.1, // Add 10% padding to the top
-        barTouchData: BarTouchData(
-          touchTooltipData: BarTouchTooltipData(
-            getTooltipItem: (group, groupIndex, rod, rodIndex) {
-              final category = data[groupIndex]['category'] as String;
-              return BarTooltipItem(
-                '$category\n',
-                const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                children: <TextSpan>[
-                  TextSpan(
-                    text: rod.toY.round().toString(),
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+    return Row(
+      children: <Widget>[
+        Expanded(
+          child: PieChart(
+            PieChartData(
+              borderData: FlBorderData(show: false),
+              sectionsSpace: 2,
+              centerSpaceRadius: 40,
+              sections: List.generate(data.length, (i) {
+                final item = data[i];
+                final value = (item['report_count'] as num).toDouble();
+                final category = item['category'] as String;
+
+                return PieChartSectionData(
+                  color: _categoryColors[category],
+                  value: value,
+                  title: '${value.toInt()}',
+                  radius: 50,
+                  titleStyle: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
                   ),
-                ],
-              );
-            },
+                );
+              }),
+            ),
           ),
         ),
-        titlesData: const FlTitlesData(
-          show: true,
-          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)), // Hide bottom titles for a cleaner look
-          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 40)),
+        const SizedBox(width: 28),
+        Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: _categoryColors.entries.map((entry) {
+            return _Indicator(
+              color: entry.value,
+              text: '${entry.key[0].toUpperCase()}${entry.key.substring(1)}', // Capitalize
+              isSquare: true,
+            );
+          }).toList(),
         ),
-        borderData: FlBorderData(show: false),
-        barGroups: List.generate(data.length, (i) {
-          final item = data[i];
-          final value = (item['report_count'] as num).toDouble();
-          return BarChartGroupData(
-            x: i,
-            barRods: [
-              BarChartRodData(
-                toY: value,
-                color: colorList[i % colorList.length],
-                width: 16,
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ],
-          );
-        }),
-        gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: maxValue > 0 ? maxValue / 5 : 1),
-      ),
+      ],
     );
   }
 }
