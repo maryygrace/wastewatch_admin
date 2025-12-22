@@ -162,18 +162,10 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
         appBar: AppBar(
           title: const Text('Report Details'),
           actions: [
-            PopupMenuButton<String>(
-              onSelected: (value) {
-                if (value == 'delete') {
-                  _deleteReport();
-                }
-              },
-              itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                PopupMenuItem<String>(
-                  value: 'delete',
-                  child: ListTile(leading: Icon(Icons.delete_outline, color: Theme.of(context).colorScheme.error), title: Text('Delete Report', style: TextStyle(color: Theme.of(context).colorScheme.error))),
-                ),
-              ],
+            IconButton(
+              icon: Icon(Icons.delete_outline, color: Theme.of(context).colorScheme.error),
+              tooltip: 'Delete Report',
+              onPressed: _deleteReport,
             ),
           ],
         ),

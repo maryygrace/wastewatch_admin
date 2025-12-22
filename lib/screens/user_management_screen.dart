@@ -54,10 +54,16 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     // Guard against async gaps by checking if the widget is mounted before navigating.
     if (!mounted) return;
 
-    // Navigate to the edit screen and wait for a result.
-    final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (context) => EditUserScreen(user: user),
+    // Use showDialog for a modal experience on web, constrained to a reasonable size.
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        clipBehavior: Clip.antiAlias,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 500, maxHeight: 700),
+          child: EditUserScreen(user: user),
+        ),
       ),
     );
 
@@ -71,8 +77,12 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     final didRequestDelete = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: const Text('Confirm Deletion'),
-        content: Text('Are you sure you want to delete the user: ${user['email']}? This action cannot be undone.'),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: Text('Are you sure you want to delete the user: ${user['email']}? This action cannot be undone.'),
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
           TextButton(
@@ -193,28 +203,19 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                   leading: const CircleAvatar(child: Icon(Icons.person_outline)),
                   title: Text(user['full_name'] ?? user['email'] ?? 'No Email'),
                   subtitle: Text('Role: ${user['role']} - Joined: ${DateFormat.yMMMd().format(DateTime.parse(user['created_at']))}'),
-                  trailing: PopupMenuButton<String>(
-                    onSelected: (value) async {
-                      if (value == 'delete') {
-                        _deleteUser(user);
-                      } else if (value == 'edit') {
-                        _editUser(user);
-                      }
-                    },
-                    itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                      const PopupMenuItem<String>(
-                        value: 'edit',
-                        child: ListTile(
-                          leading: Icon(Icons.edit_outlined),
-                          title: Text('Edit User'),
-                        ),
+                  onTap: () => _editUser(user),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined),
+                        tooltip: 'Edit User',
+                        onPressed: () => _editUser(user),
                       ),
-                      PopupMenuItem<String>(
-                        value: 'delete',
-                        child: ListTile(
-                          leading: Icon(Icons.delete_outline, color: Theme.of(context).colorScheme.error),
-                          title: Text('Delete User', style: TextStyle(color: Theme.of(context).colorScheme.error)),
-                        ),
+                      IconButton(
+                        icon: Icon(Icons.delete_outline, color: Theme.of(context).colorScheme.error),
+                        tooltip: 'Delete User',
+                        onPressed: () => _deleteUser(user),
                       ),
                     ],
                   ),

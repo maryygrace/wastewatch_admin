@@ -50,7 +50,7 @@ class WasteWatchAdminApp extends StatelessWidget {
       builder: (context, themeProvider, child) {
         return MaterialApp(
           title: 'WasteWatch Admin',
-          debugShowCheckedModeBanner: false, // Hides the debug banner
+          debugShowCheckedModeBanner: false,
           theme: ThemeData(
             colorScheme: ColorScheme.fromSeed(seedColor: Colors.green, brightness: Brightness.light),
             useMaterial3: true,

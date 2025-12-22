@@ -313,7 +313,7 @@ class _RecentReportsListState extends State<_RecentReportsList> {
             final reporter = report['reporter'];
             final reporterName = reporter?['full_name'] ?? reporter?['email'] ?? 'Unknown';
             final status = report['status'] ?? 'N/A';
-            final date = DateFormat.yMMMd().format(DateTime.parse(report['createdAt']));
+            final date = DateFormat.yMMMd().format(DateTime.parse(report['created_at']));
 
             return ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
@@ -444,7 +444,7 @@ class _SystemAlertsListState extends State<_SystemAlertsList> {
       'overdue_report' => ListTile(
           leading: const Icon(Icons.error_outline, color: Colors.orange),
           title: Text('Overdue Report: ${data['id'].toString().substring(0, 8)}...'),
-          subtitle: Text('Pending for ${DateTime.now().difference(DateTime.parse(data['createdAt'])).inDays} days'),
+          subtitle: Text('Pending for ${DateTime.now().difference(DateTime.parse(data['created_at'])).inDays} days'),
         ),
       'collector_overload' => ListTile(
           leading: const Icon(Icons.person_search, color: Colors.red),
@@ -595,7 +595,7 @@ class _ReportsByLocationChartState extends State<_ReportsByLocationChart> {
 
         final data = snapshot.data!;
         // Sort data from highest to lowest report count
-        data.sort((a, b) => (b['report_count'] as num).compareTo(a['report_count'] as num));
+        data.sort((a, b) => ((b['report_count'] ?? b['count'] ?? 0) as num).compareTo((a['report_count'] ?? a['count'] ?? 0) as num));
         return _buildChart(data);
       },
     );
@@ -603,7 +603,7 @@ class _ReportsByLocationChartState extends State<_ReportsByLocationChart> {
 
   Widget _buildChart(List<Map<String, dynamic>> data) {
     final maxValue = data.fold<double>(0, (max, item) {
-      final value = (item['report_count'] as num).toDouble();
+      final value = ((item['report_count'] ?? item['count'] ?? 0) as num).toDouble();
       return value > max ? value : max;
     });
 
@@ -737,7 +737,7 @@ class _WasteStatisticsChartState extends State<_WasteStatisticsChart> {
         // Filter the data to only include the 5 specified waste categories.
         final allowedCategories = _categoryColors.keys.toList();
         final filteredData = snapshot.data!
-            .where((item) => allowedCategories.contains(item['category']))
+            .where((item) => allowedCategories.contains(item['waste_category']))
             .toList();
 
         return _buildChart(filteredData);
@@ -747,8 +747,8 @@ class _WasteStatisticsChartState extends State<_WasteStatisticsChart> {
 
   Widget _buildChart(List<Map<String, dynamic>> data) {
     // Sort data to match the order of colors for consistency
-    data.sort((a, b) => (_categoryColors.keys.toList().indexOf(a['category']))
-        .compareTo(_categoryColors.keys.toList().indexOf(b['category'])));
+    data.sort((a, b) => (_categoryColors.keys.toList().indexOf(a['waste_category']))
+        .compareTo(_categoryColors.keys.toList().indexOf(b['waste_category'])));
 
     return Row(
       children: <Widget>[
@@ -760,8 +760,8 @@ class _WasteStatisticsChartState extends State<_WasteStatisticsChart> {
               centerSpaceRadius: 40,
               sections: List.generate(data.length, (i) {
                 final item = data[i];
-                final value = (item['report_count'] as num).toDouble();
-                final category = item['category'] as String;
+                final value = ((item['report_count'] ?? item['count'] ?? 0) as num).toDouble();
+                final category = item['waste_category'] as String;
 
                 return PieChartSectionData(
                   color: _categoryColors[category],

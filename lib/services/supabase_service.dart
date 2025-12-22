@@ -88,13 +88,13 @@ class SupabaseService {
           // This explicit syntax tells Supabase which foreign key column on the 'reports' table to use for the join.
           // We join 'users' twice: once for the reporter (via the 'user_id' column) and once for the assignee (via the 'assigned_to' column).
           // The alias (e.g., 'reporter:') is what the joined data will be named in the result.
-          .select('*, reporter:users!userId(full_name, email), assignee:users!reports_collector_id_fkey(full_name, email)');
+          .select('*, wasteCategory:waste_category, imageUrl:image_url, createdAt:created_at, updatedAt:updated_at, reporter:users!user_id(full_name, email), assignee:users!collector_id(full_name, email)');
       
       if (status != null && status != 'all') {
         query = query.eq('status', status);
       }
 
-      query = query.order('createdAt', ascending: false);
+      query = query.order('created_at', ascending: false);
 
       if (limit != null) {
         query = query.limit(limit);
@@ -145,7 +145,7 @@ class SupabaseService {
   }) async {
     try {
       await _supabase.from('reports').update({
-        'wasteCategory': wasteCategory,
+        'waste_category': wasteCategory,
         'description': description,
         'updated_at': DateTime.now().toIso8601String(),
       }).eq('id', reportId);
@@ -290,10 +290,10 @@ class SupabaseService {
       final cutoffDate = DateTime.now().subtract(Duration(days: days));
       final response = await _supabase
           .from('reports')
-          .select('*, reporter:users!userId(full_name, email)') // Join to get reporter info
+          .select('*, wasteCategory:waste_category, imageUrl:image_url, createdAt:created_at, updatedAt:updated_at, reporter:users!user_id(full_name, email)') // Join to get reporter info
           .eq('status', 'pending')
-          .lt('createdAt', cutoffDate.toIso8601String()) // 'lt' means 'less than' (older than)
-          .order('createdAt', ascending: true); // Order by oldest first
+          .lt('created_at', cutoffDate.toIso8601String()) // 'lt' means 'less than' (older than)
+          .order('created_at', ascending: true); // Order by oldest first
       return response;
     } catch (e) {
       _log.severe('Error fetching overdue pending reports', e);
@@ -322,26 +322,36 @@ class SupabaseService {
       const int collectorThreshold = 10;
       const int locationThreshold = 20;
 
-      // Fetch all alerts in parallel
-      final results = await Future.wait<dynamic>([
-        fetchOverduePendingReports(overdueDays), // Use the existing Dart method to avoid the SQL type error.
-        _supabase.rpc('get_overloaded_collectors', params: {'report_threshold': collectorThreshold}),
-        _supabase.rpc('get_high_volume_locations', params: {'report_threshold': locationThreshold}),
-      ]);
-
       final List<Map<String, dynamic>> alerts = [];
 
       // Process overdue reports
-      for (var report in (results[0] as List)) {
-        alerts.add({'type': 'overdue_report', 'data': report});
+      try {
+        final overdueReports = await fetchOverduePendingReports(overdueDays);
+        for (var report in overdueReports) {
+          alerts.add({'type': 'overdue_report', 'data': report});
+        }
+      } catch (e) {
+        _log.warning('Error fetching overdue reports for alerts', e);
       }
+
       // Process overloaded collectors
-      for (var collector in (results[1] as List)) {
-        alerts.add({'type': 'collector_overload', 'data': collector});
+      try {
+        final overloadedCollectors = await _supabase.rpc('get_overloaded_collectors', params: {'report_threshold': collectorThreshold});
+        for (var collector in (overloadedCollectors as List)) {
+          alerts.add({'type': 'collector_overload', 'data': collector});
+        }
+      } catch (e) {
+        _log.warning('Error fetching overloaded collectors for alerts', e);
       }
+
       // Process high volume locations
-      for (var location in (results[2] as List)) {
-        alerts.add({'type': 'high_volume_location', 'data': location});
+      try {
+        final highVolumeLocations = await _supabase.rpc('get_high_volume_locations', params: {'report_threshold': locationThreshold});
+        for (var location in (highVolumeLocations as List)) {
+          alerts.add({'type': 'high_volume_location', 'data': location});
+        }
+      } catch (e) {
+        _log.warning('Error fetching high volume locations for alerts', e);
       }
 
       return alerts;

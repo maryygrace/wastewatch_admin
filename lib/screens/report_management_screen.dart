@@ -88,24 +88,35 @@ class _ReportManagementScreenState extends State<ReportManagementScreen> {
               // The 'users' object is now available thanks to the join query.
               final reporter = report['reporter'];
               final reporterName = reporter?['full_name'] ?? reporter?['email'] ?? 'Unknown User';
+
+              void showReportDetails() async {
+                // Use showDialog for a modal experience on web, constrained to a reasonable size.
+                final result = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => Dialog(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    clipBehavior: Clip.antiAlias,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 700, maxHeight: 850),
+                      child: ReportDetailScreen(report: report),
+                    ),
+                  ),
+                );
+
+                // If the detail screen pops with 'true', it means an update happened.
+                if (result == true && mounted) {
+                  _refreshReports();
+                }
+              }
+
               return ListTile(
                 title: Text('Report by: $reporterName'),
-                subtitle: Text('Status: ${report['status']} - Created: ${DateFormat.yMMMd().format(DateTime.parse(report['createdAt']))}'),
-                trailing: const Icon(Icons.arrow_forward_ios),
-                onTap: () async {
-                  // Await navigation and refresh if the detail screen indicates a change.
-                  final result = await Navigator.push<bool>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ReportDetailScreen(report: report),
-                    ),
-                  );
-
-                  // If the detail screen pops with 'true', it means an update happened.
-                  if (result == true && mounted) { // This was already correct
-                    _refreshReports();
-                  }
-                },
+                subtitle: Text('Status: ${report['status']} - Created: ${DateFormat.yMMMd().format(DateTime.parse(report['created_at']))}'),
+                trailing: TextButton(
+                  onPressed: showReportDetails,
+                  child: const Text('View Details'),
+                ),
+                onTap: showReportDetails,
               );
             },
           );
